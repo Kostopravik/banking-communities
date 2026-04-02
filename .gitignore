@@ -1,0 +1,17 @@
+# Python
+*.pyc
+__pycache__/
+venv/
+venv_linux/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker 
+neo4j_data/
+neo4j_logs/
