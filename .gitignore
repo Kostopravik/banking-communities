@@ -16,3 +16,20 @@ Thumbs.db
 neo4j_data/
 neo4j_logs/
 
+# Flutter / Dart
+.build/
+.dart_tool/
+.packages
+.pub/
+*.lock
+
+# Flutter platforms (если не коммитим Android/iOS/Linux/MacOS/Windows)
+#android/
+#ios/
+linux/
+macos/
+windows/
+
+# Tests / metadata
+#test/
+web_metadata/
