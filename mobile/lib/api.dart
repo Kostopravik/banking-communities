@@ -20,11 +20,10 @@ class ApiClient {
   String? token;
 
   Map<String, String> _headers({bool jsonBody = false}) {
-    final h = <String, String>{
+    return <String, String>{
       if (jsonBody) 'Content-Type': 'application/json',
       if (token != null) 'Authorization': 'Bearer $token',
     };
-    return h;
   }
 
   Future<(UserPublic, String)> login({
@@ -67,11 +66,32 @@ class ApiClient {
       throw ApiException(r.statusCode, r.body);
     }
     final map = jsonDecode(r.body) as Map<String, dynamic>;
-    final total = (map['total_tx_count'] as num).toInt();
+    final rawTotal = map['total_operations'] ?? map['total_tx_count'];
+    final total = (rawTotal as num).toInt();
     final list = (map['communities'] as List<dynamic>)
         .map((e) => CommunityOverview.fromJson(e as Map<String, dynamic>))
         .toList();
     return (total, list);
+  }
+
+  Future<PostDto> createPost({
+    required int communityId,
+    required String title,
+    required String text,
+  }) async {
+    final r = await http.post(
+      Uri.parse('$baseUrl/posts'),
+      headers: _headers(jsonBody: true),
+      body: jsonEncode({
+        'id_community': communityId,
+        'title': title,
+        'text': text,
+      }),
+    );
+    if (r.statusCode != 201 && r.statusCode != 200) {
+      throw ApiException(r.statusCode, r.body);
+    }
+    return PostDto.fromJson(jsonDecode(r.body) as Map<String, dynamic>);
   }
 
   Future<List<PostDto>> posts({int? communityId}) async {
@@ -100,6 +120,20 @@ class ApiClient {
     }
   }
 
+  Future<List<CashbackOpportunityDto>> cashbackOpportunities() async {
+    final r = await http.get(
+      Uri.parse('$baseUrl/users/me/cashback-opportunities'),
+      headers: _headers(),
+    );
+    if (r.statusCode != 200) {
+      throw ApiException(r.statusCode, r.body);
+    }
+    final list = jsonDecode(r.body) as List<dynamic>;
+    return list
+        .map((e) => CashbackOpportunityDto.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<List<CashbackDto>> myCashback() async {
     final r = await http.get(
       Uri.parse('$baseUrl/users/me/cashback'),
@@ -111,6 +145,20 @@ class ApiClient {
     final list = jsonDecode(r.body) as List<dynamic>;
     return list
         .map((e) => CashbackDto.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<BenefitDto>> myBenefits() async {
+    final r = await http.get(
+      Uri.parse('$baseUrl/users/me/benefits'),
+      headers: _headers(),
+    );
+    if (r.statusCode != 200) {
+      throw ApiException(r.statusCode, r.body);
+    }
+    final list = jsonDecode(r.body) as List<dynamic>;
+    return list
+        .map((e) => BenefitDto.fromJson(e as Map<String, dynamic>))
         .toList();
   }
 
@@ -127,5 +175,54 @@ class ApiClient {
     return list
         .map((e) => RecommendItem.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<({bool liked, int likeCount})> togglePostLike(int postId) async {
+    final r = await http.post(
+      Uri.parse('$baseUrl/posts/$postId/like'),
+      headers: _headers(),
+    );
+    if (r.statusCode != 200) {
+      throw ApiException(r.statusCode, r.body);
+    }
+    final map = jsonDecode(r.body) as Map<String, dynamic>;
+    return (
+      liked: map['liked'] as bool,
+      likeCount: (map['like_count'] as num).toInt(),
+    );
+  }
+
+  Future<List<CommentDto>> postComments(int postId) async {
+    final r = await http.get(
+      Uri.parse('$baseUrl/posts/$postId/comments'),
+      headers: _headers(),
+    );
+    if (r.statusCode != 200) {
+      throw ApiException(r.statusCode, r.body);
+    }
+    final list = jsonDecode(r.body) as List<dynamic>;
+    return list
+        .map((e) => CommentDto.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<CommentDto> addPostComment(
+    int postId,
+    String message, {
+    int? parentId,
+  }) async {
+    final body = <String, dynamic>{'message': message};
+    if (parentId != null) body['parent_id'] = parentId;
+    final r = await http.post(
+      Uri.parse('$baseUrl/posts/$postId/comments'),
+      headers: _headers(jsonBody: true),
+      body: jsonEncode(body),
+    );
+    if (r.statusCode != 201 && r.statusCode != 200) {
+      throw ApiException(r.statusCode, r.body);
+    }
+    return CommentDto.fromJson(
+      jsonDecode(r.body) as Map<String, dynamic>,
+    );
   }
 }

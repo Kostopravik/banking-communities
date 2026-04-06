@@ -18,7 +18,7 @@ class MccCategory:
     cashback_max: int
 
 
-# Основные категории ВТБ (MCC из вашего списка; диапазоны - несколько кодов из диапазона)
+# Основные категории ВТБ (MCC из вашего списка; диапазоны — несколько кодов из диапазона)
 MCC_CATEGORIES: List[MccCategory] = [
     MccCategory(
         "supermarkets",

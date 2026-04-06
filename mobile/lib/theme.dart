@@ -12,15 +12,30 @@ ThemeData buildVtbTheme() {
       foregroundColor: Colors.white,
       elevation: 0,
       centerTitle: false,
+      titleTextStyle: TextStyle(
+        color: Colors.white,
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+    cardTheme: CardThemeData(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: vtbBlue,
         foregroundColor: Colors.white,
+        elevation: 1,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     ),
-    scaffoldBackgroundColor: Colors.grey[100],
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      selectedItemColor: vtbBlue,
+      unselectedItemColor: Colors.grey,
+      type: BottomNavigationBarType.fixed,
+    ),
+    scaffoldBackgroundColor: const Color(0xFFF0F2F7),
   );
 }
 

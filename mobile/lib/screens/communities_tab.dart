@@ -114,7 +114,10 @@ class _CommunitiesTabState extends State<CommunitiesTab> {
               ...locked.map(
                 (c) => ListTile(
                   title: Text(c.name),
-                  subtitle: Text('Нужно ещё ${c.transactionsNeeded} транзакций (по Neo4j)'),
+                  subtitle: Text(
+                    'В категории MCC: ${c.categoryOperationsCount}/${c.mccOperationsRequired}. '
+                    'Не хватает ещё ${c.transactionsNeeded} операций (Neo4j).',
+                  ),
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute<void>(

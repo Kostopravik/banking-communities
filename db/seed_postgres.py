@@ -1,7 +1,5 @@
 """
-Заполнение PostgreSQL: клиенты, сообщества, посты, комментарии, кэшбэк.
-Запуск из корня репозитория: python db/seed_postgres.py
-Требуется: применён db/schema.sql (или первый запуск создаст через seed_all).
+Заполнение PostgreSQL: клиенты, сообщества (с category_key), посты, комментарии, лайки, офферы «Выгода».
 """
 from __future__ import annotations
 
@@ -21,7 +19,7 @@ from config import (
     POSTGRES_PORT,
     POSTGRES_USER,
 )
-from mcc_data import INTEREST_COMMUNITIES, MCC_CATEGORIES
+from mcc_data import INTEREST_COMMUNITIES, MCC_CATEGORIES, category_by_mcc
 
 
 def _hash_pw(plain: str) -> str:
@@ -33,6 +31,15 @@ def apply_schema(conn) -> None:
     with open(schema_path, encoding="utf-8") as f:
         conn.cursor().execute(f.read())
     conn.commit()
+
+
+def _cashback_percent_for_key(category_key: str | None) -> int:
+    if not category_key:
+        return 3
+    for c in MCC_CATEGORIES:
+        if c.key == category_key:
+            return c.cashback_max
+    return 3
 
 
 def seed() -> None:
@@ -50,8 +57,8 @@ def seed() -> None:
 
         cur.execute(
             """
-            TRUNCATE TABLE client_cashback, cashback, comment, post,
-                client_community, community, client
+            TRUNCATE TABLE post_like, client_cashback, cashback, comment, post,
+                client_community, cashback_offer, community, client
             RESTART IDENTITY CASCADE
             """
         )
@@ -74,29 +81,38 @@ def seed() -> None:
             clients,
         )
 
-        communities: list[tuple[str, str]] = []
+        communities: list[tuple[str, str, str]] = []
         for c in MCC_CATEGORIES:
             desc = f"Сообщество по категории «{c.name_ru}». Кэшбэк {c.cashback_min}–{c.cashback_max}%."
-            communities.append((c.name_ru, desc))
+            communities.append((c.name_ru, desc, c.key))
         for ic in INTEREST_COMMUNITIES:
             desc = f"Интерес по транзакциям (MCC {ic['mcc_hint']})."
-            communities.append((ic["name"], desc))
+            communities.append((ic["name"], desc, ic["category_key"]))
 
         execute_values(
             cur,
             """
-            INSERT INTO community (name, description)
+            INSERT INTO community (name, description, category_key)
             VALUES %s
             """,
             communities,
         )
 
-        cur.execute(
-            "UPDATE community SET min_transactions = 2 WHERE name = 'Фитнес'"
-        )
-        cur.execute(
-            "UPDATE community SET min_transactions = 3 WHERE name IN ('Duty Free', 'Авиабилеты')"
-        )
+        cur.execute("SELECT id, name, category_key FROM community ORDER BY id")
+        for rid, name, ck in cur.fetchall():
+            pct = _cashback_percent_for_key(ck)
+            cur.execute(
+                """
+                INSERT INTO cashback_offer (id_community, title, percent, description)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (
+                    rid,
+                    f"Выгода: {name}",
+                    pct,
+                    f"Кэшбэк до {pct}% после вступления в сообщество «{name}».",
+                ),
+            )
 
         cur.execute("SELECT id, name FROM community ORDER BY id")
         comm_rows = cur.fetchall()
@@ -137,6 +153,12 @@ def seed() -> None:
             (2, name_to_cid["Фитнес"], "Абонемент в зал", "Сравниваю цены на годовые карты.", None),
             (3, name_to_cid["Любители выпечки"], "Домашний хлеб", "Рецепт закваски без заморочек.", None),
             (4, name_to_cid["Электроника"], "Скидки на наушники", "Кто ловил кэшбэк на 5732?", None),
+            (1, name_to_cid["Кафе и рестораны"], "Латте с овсяным", "Пробую все сети на Невском.", None),
+            (3, name_to_cid["Супермаркеты"], "Сезонные скидки", "ВкусВилл vs Пятёрочка — что выгоднее?", None),
+            (5, name_to_cid["Красота"], "Салон или дома?", "Делюсь находками по уходу.", None),
+            (6, name_to_cid["АЗС"], "Карта заправок", "Где удобнее с кэшбэком.", None),
+            (2, name_to_cid["Здоровье"], "Чекап раз в год", "Собрал чек-лист анализов.", None),
+            (4, name_to_cid["Авиабилеты"], "Мили или кэшбэк", "Сравниваю программы лояльности.", None),
         ]
         execute_values(
             cur,
@@ -147,25 +169,69 @@ def seed() -> None:
             posts,
         )
 
-        cur.execute("SELECT id FROM post ORDER BY id LIMIT 1")
-        first_post = cur.fetchone()
-        if first_post:
-            pid = first_post[0]
+        cur.execute("SELECT id FROM post ORDER BY id")
+        post_ids = [r[0] for r in cur.fetchall()]
+        p0, p1 = post_ids[0], post_ids[1]
+
+        cur.execute(
+            """
+            INSERT INTO comment (id_post, id_sender, id_parent, message)
+            VALUES (%s, %s, NULL, %s)
+            RETURNING id
+            """,
+            (p0, 2, "Согласен, кэшбэк отличный."),
+        )
+        c_parent = cur.fetchone()[0]
+        cur.execute(
+            """
+            INSERT INTO comment (id_post, id_sender, id_parent, message)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (p0, 3, c_parent, "Поделитесь адресом кофейни."),
+        )
+        cur.execute(
+            """
+            INSERT INTO comment (id_post, id_sender, id_parent, message)
+            VALUES (%s, %s, NULL, %s)
+            """,
+            (p0, 4, "Пробовал — топ."),
+        )
+        cur.execute(
+            """
+            INSERT INTO comment (id_post, id_sender, id_parent, message)
+            VALUES (%s, %s, NULL, %s)
+            """,
+            (p1, 1, "У нас в зале акция на год."),
+        )
+        for pid, sender, msg in [
+            (post_ids[2], 5, "Закваска на ржаной муке — огонь."),
+            (post_ids[3], 6, "DNS часто даёт рассрочку."),
+            (post_ids[4], 2, "Овсяное молоко бесплатно?"),
+            (post_ids[5], 1, "Сравнил корзину на 5000 ₽."),
+        ]:
             cur.execute(
                 """
                 INSERT INTO comment (id_post, id_sender, id_parent, message)
                 VALUES (%s, %s, NULL, %s)
-                RETURNING id
                 """,
-                (pid, 2, "Согласен, кэшбэк отличный."),
+                (pid, sender, msg),
             )
-            parent_cid = cur.fetchone()[0]
+
+        cur.execute(
+            """
+            INSERT INTO comment (id_post, id_sender, id_parent, message)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (p0, 5, c_parent, "Адрес в личку скину."),
+        )
+
+        for uid, pid in [(2, p0), (3, p0), (4, p0), (1, p1), (6, post_ids[2])]:
             cur.execute(
                 """
-                INSERT INTO comment (id_post, id_sender, id_parent, message)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO post_like (id_client, id_post) VALUES (%s, %s)
+                ON CONFLICT (id_client, id_post) DO NOTHING
                 """,
-                (pid, 3, parent_cid, "Поделитесь адресом кофейни."),
+                (uid, pid),
             )
 
         cashback_rows = [
@@ -173,12 +239,22 @@ def seed() -> None:
             (340.0, 5411),
             (89.0, 8041),
             (200.0, 5997),
+            (150.0, 5541),
+            (95.0, 4121),
+            (180.0, 5732),
         ]
         cb_ids: list[int] = []
         for amount, place in cashback_rows:
+            cat = category_by_mcc(place)
+            ck = cat.key if cat else None
+            label = f"MCC {place} · {cat.name_ru}" if cat else f"MCC {place}"
             cur.execute(
-                "INSERT INTO cashback (amount, place) VALUES (%s, %s) RETURNING id",
-                (amount, place),
+                """
+                INSERT INTO cashback (amount, place, category_key, category_label)
+                VALUES (%s, %s, %s, %s)
+                RETURNING id
+                """,
+                (amount, place, ck, label),
             )
             cb_ids.append(cur.fetchone()[0])
 
@@ -198,7 +274,7 @@ def seed() -> None:
         )
 
         conn.commit()
-        print("PostgreSQL: схема применена, тестовые данные загружены.")
+        print("PostgreSQL: данные загружены (посты, комментарии, лайки, офферы «Выгода»).")
         print("  Логины: anna, boris, elena, dmitry, maria, igor — пароль: pass123")
     except Exception:
         conn.rollback()

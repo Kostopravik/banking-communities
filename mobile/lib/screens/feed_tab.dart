@@ -79,6 +79,7 @@ class _FeedTabState extends State<FeedTab> {
                 (p) => PostCard(
                   post: p,
                   communityName: data.names[p.idCommunity] ?? 'Сообщество ${p.idCommunity}',
+                  onChanged: () => setState(() => _refreshKey++),
                 ),
               ),
             ],

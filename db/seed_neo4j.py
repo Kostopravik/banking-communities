@@ -1,7 +1,6 @@
 """
-Заполнение Neo4j: User (id = client.id из PostgreSQL), Place, связь HAS_TRANSACTION
-с полями tx_count (кол-во операций) и total_amount (сумма трат в рублях).
-Запуск: python db/seed_neo4j.py
+Neo4j: одна транзакция = одна связь HAS_TRANSACTION с amount (руб.) и tx_id.
+User.id = client.id из PostgreSQL.
 """
 from __future__ import annotations
 
@@ -23,7 +22,6 @@ def _meta_for_mcc(mcc: int) -> tuple[str, str, int, int]:
     return "unknown", "Прочее", 1, 3
 
 
-# Торговые точки: имя, MCC (из справочника ВТБ)
 PLACES: list[dict] = [
     {"name": "Кофемания Тверская", "mcc": 5812},
     {"name": "Starbucks Невский", "mcc": 5812},
@@ -39,8 +37,8 @@ PLACES: list[dict] = [
     {"name": "Отель Marriott", "mcc": 7011},
 ]
 
-# Пользователь ↔ место: число операций и сумма (раздельно, как просили)
-TRANSACTIONS: list[dict] = [
+# Агрегаты для генерации отдельных транзакций
+AGG: list[dict] = [
     {"user_id": 1, "place_name": "Кофемания Тверская", "tx_count": 12, "total_amount": 18600.0},
     {"user_id": 1, "place_name": "Starbucks Невский", "tx_count": 5, "total_amount": 4200.0},
     {"user_id": 1, "place_name": "Пекарня Хлебница", "tx_count": 8, "total_amount": 6400.0},
@@ -57,8 +55,30 @@ TRANSACTIONS: list[dict] = [
 ]
 
 
+def _expand_transactions() -> list[dict]:
+    out: list[dict] = []
+    seq = 0
+    for row in AGG:
+        n = int(row["tx_count"])
+        total = float(row["total_amount"])
+        unit = round(total / n, 2) if n else total
+        for i in range(n):
+            seq += 1
+            amt = unit if i < n - 1 else round(total - unit * (n - 1), 2)
+            out.append(
+                {
+                    "user_id": row["user_id"],
+                    "place_name": row["place_name"],
+                    "amount": amt,
+                    "tx_id": f"u{row['user_id']}-{row['place_name'][:8]}-{i}-{seq}",
+                }
+            )
+    return out
+
+
 def seed() -> None:
     driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+    txs = _expand_transactions()
     try:
         with driver.session() as session:
             session.run("MATCH (n) DETACH DELETE n")
@@ -102,23 +122,19 @@ def seed() -> None:
                     cmax=cmax,
                 )
 
-            for t in TRANSACTIONS:
+            for t in txs:
                 session.run(
                     """
                     MATCH (u:User {id: $uid}), (pl:Place {name: $pname})
-                    MERGE (u)-[r:HAS_TRANSACTION]->(pl)
-                    SET r.tx_count = $tx_count,
-                        r.total_amount = $total_amount,
-                        r.currency = 'RUB'
+                    CREATE (u)-[:HAS_TRANSACTION {tx_id: $tid, amount: $amt, currency: 'RUB'}]->(pl)
                     """,
                     uid=t["user_id"],
                     pname=t["place_name"],
-                    tx_count=t["tx_count"],
-                    total_amount=t["total_amount"],
+                    tid=t["tx_id"],
+                    amt=float(t["amount"]),
                 )
 
-        print("Neo4j: граф очищен, пользователи, места и связи HAS_TRANSACTION созданы.")
-        print("  Связь: tx_count — число операций, total_amount — сумма трат (руб.).")
+        print(f"Neo4j: создано {len(txs)} отдельных связей HAS_TRANSACTION (по одной на операцию).")
     finally:
         driver.close()
 

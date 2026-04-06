@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../auth_provider.dart';
 import '../theme.dart';
-import 'cashback_tab.dart';
+import 'vygoda_tab.dart';
 import 'communities_tab.dart';
 import 'feed_tab.dart';
 
@@ -60,7 +60,7 @@ class _HomeShellState extends State<HomeShell> {
         children: const [
           FeedTab(),
           CommunitiesTab(),
-          CashbackTab(),
+          VygodTab(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -70,7 +70,7 @@ class _HomeShellState extends State<HomeShell> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Лента'),
           BottomNavigationBarItem(icon: Icon(Icons.group), label: 'Сообщества'),
-          BottomNavigationBarItem(icon: Icon(Icons.attach_money), label: 'Кэшбэк'),
+          BottomNavigationBarItem(icon: Icon(Icons.card_giftcard), label: 'Выгода'),
         ],
       ),
     );
