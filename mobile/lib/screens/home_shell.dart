@@ -70,7 +70,7 @@ class _HomeShellState extends State<HomeShell> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Лента'),
           BottomNavigationBarItem(icon: Icon(Icons.group), label: 'Сообщества'),
-          BottomNavigationBarItem(icon: Icon(Icons.card_giftcard), label: 'Выгода'),
+          BottomNavigationBarItem(icon: Icon(Icons.card_giftcard), label: 'Акции/кэшбэки'),
         ],
       ),
     );

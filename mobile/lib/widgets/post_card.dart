@@ -56,6 +56,8 @@ class _PostCardState extends State<PostCard> {
   bool _showComments = false;
   late int _likeCount;
   late bool _liked;
+  late String _titleText;
+  late String _bodyText;
   List<CommentDto> _comments = [];
   bool _loadingComments = false;
   bool _sending = false;
@@ -103,7 +105,12 @@ class _PostCardState extends State<PostCard> {
     if (t.isEmpty || b.isEmpty) return;
     try {
       await api.updatePost(postId: widget.post.id, title: t, text: b);
-      if (mounted) widget.onChanged?.call();
+      if (mounted) {
+        setState(() {
+          _titleText = t;
+          _bodyText = b;
+        });
+      }
     } on ApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.body)));
@@ -139,6 +146,8 @@ class _PostCardState extends State<PostCard> {
     super.initState();
     _likeCount = widget.post.likeCount;
     _liked = widget.post.likedByMe;
+    _titleText = widget.post.title ?? '';
+    _bodyText = widget.post.text ?? '';
   }
 
   @override
@@ -147,6 +156,8 @@ class _PostCardState extends State<PostCard> {
     if (oldWidget.post.id != widget.post.id) {
       _likeCount = widget.post.likeCount;
       _liked = widget.post.likedByMe;
+      _titleText = widget.post.title ?? '';
+      _bodyText = widget.post.text ?? '';
       _comments = [];
       _showComments = false;
       _replyToId = null;
@@ -186,7 +197,7 @@ class _PostCardState extends State<PostCard> {
           _liked = r.liked;
           _likeCount = r.likeCount;
         });
-        widget.onChanged?.call();
+        // Intentionally not refreshing parent list on like.
       }
     } on ApiException catch (e) {
       if (mounted) {
@@ -215,7 +226,7 @@ class _PostCardState extends State<PostCard> {
           _replyToName = null;
         });
       }
-      widget.onChanged?.call();
+      // Intentionally not refreshing parent list on comment add.
     } on ApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -232,8 +243,8 @@ class _PostCardState extends State<PostCard> {
     final api = context.read<AuthProvider>().api;
     final myId = context.read<AuthProvider>().user?.id;
     final canManagePost = myId != null && myId == widget.post.idSender;
-    final title = widget.post.title ?? '';
-    final body = widget.post.text ?? '';
+    final title = _titleText;
+    final body = _bodyText;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),

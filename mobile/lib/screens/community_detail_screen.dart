@@ -70,7 +70,7 @@ class _CommunityDetailScreenState extends State<CommunityDetailScreen> {
                   const Padding(
                     padding: EdgeInsets.all(12),
                     child: Text(
-                      'Пока нет постов — нажмите «Написать пост».',
+                      'Пока нет постов - нажмите «Написать пост».',
                       textAlign: TextAlign.center,
                     ),
                   ),

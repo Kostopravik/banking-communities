@@ -72,6 +72,16 @@ def neo4j_user_category_operations(user_id: int, category_key: str | None) -> in
         return int(rec["cnt"])
 
 
+def _purchase_word(count: int) -> str:
+    mod10 = count % 10
+    mod100 = count % 100
+    if mod10 == 1 and mod100 != 11:
+        return "покупку"
+    if 2 <= mod10 <= 4 and not (12 <= mod100 <= 14):
+        return "покупки"
+    return "покупок"
+
+
 @app.post("/auth/login", response_model=TokenResponse)
 def login(body: LoginRequest):
     conn = get_connection()
@@ -228,10 +238,11 @@ def join_community(
             )
         cnt = neo4j_user_category_operations(user["id"], ck)
         if cnt < MCC_OPS_REQUIRED:
+            need = MCC_OPS_REQUIRED - cnt
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
-                    f"Для вступления нужно еще {MCC_OPS_REQUIRED - cnt} покупок "
+                    f"Для вступления нужно еще {need} {_purchase_word(need)} "
                     f"в этой категории (сейчас {cnt} из {MCC_OPS_REQUIRED})"
                 ),
             )
@@ -386,7 +397,8 @@ def my_benefits(user: Annotated[dict, Depends(get_current_user)]):
                 hint = "Активно — вы в сообществе"
             elif need > 0:
                 hint = (
-                    f"Сначала выполните условие вступления: еще {need} покупок в категории сообщества."
+                    f"Сначала выполните условие вступления: еще {need} "
+                    f"{_purchase_word(need)} в категории сообщества."
                 )
             else:
                 hint = f"Вступите в сообщество «{name}», чтобы активировать выгоду."
@@ -953,7 +965,7 @@ def recommend_me(user: Annotated[dict, Depends(get_current_user)]):
 @app.get("/recommend/{user_id}")
 def recommend(user_id: int):
     """
-    По каждому месту: operation_count — число отдельных рёбер HAS_TRANSACTION
+    По каждому месту: operation_count - число отдельных рёбер HAS_TRANSACTION
     (каждая покупка = одно ребро с полем amount). Не путать с «одной агрегированной записью».
     """
     recommendations = []

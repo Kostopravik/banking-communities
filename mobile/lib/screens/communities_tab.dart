@@ -17,6 +17,14 @@ class CommunitiesTab extends StatefulWidget {
 class _CommunitiesTabState extends State<CommunitiesTab> {
   int _refreshKey = 0;
 
+  String _purchaseWord(int n) {
+    final mod10 = n % 10;
+    final mod100 = n % 100;
+    if (mod10 == 1 && mod100 != 11) return 'покупку';
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'покупки';
+    return 'покупок';
+  }
+
   Future<(int, List<CommunityOverview>)> _load(AuthProvider auth) async {
     return auth.api.communitiesOverview();
   }
@@ -128,7 +136,8 @@ class _CommunitiesTabState extends State<CommunitiesTab> {
                   title: Text(c.name),
                   subtitle: Text(
                     'Пока недоступно. Чтобы вступить, нужно еще '
-                    '${c.transactionsNeeded} покупок в категории этого сообщества.',
+                    '${c.transactionsNeeded} ${_purchaseWord(c.transactionsNeeded)} '
+                    'в категории этого сообщества.',
                   ),
                   onTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(

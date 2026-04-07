@@ -15,14 +15,13 @@ class VygodTab extends StatefulWidget {
 class _VygodTabState extends State<VygodTab> {
   int _key = 0;
 
-  Future<(List<BenefitDto>, List<CashbackDto>, List<RecommendItem>)> _load(
+  Future<(List<BenefitDto>, List<CashbackDto>)> _load(
     AuthProvider auth,
   ) async {
     final api = auth.api;
     final benefits = await api.myBenefits();
     final cash = await api.myCashback();
-    final rec = await api.recommendMe();
-    return (benefits, cash, rec);
+    return (benefits, cash);
   }
 
   @override
@@ -31,8 +30,7 @@ class _VygodTabState extends State<VygodTab> {
 
     return RefreshIndicator(
       onRefresh: () async => setState(() => _key++),
-      child: FutureBuilder<
-          (List<BenefitDto>, List<CashbackDto>, List<RecommendItem>)>(
+      child: FutureBuilder<(List<BenefitDto>, List<CashbackDto>)>(
         key: ValueKey(_key),
         future: _load(auth),
         builder: (context, snap) {
@@ -52,19 +50,10 @@ class _VygodTabState extends State<VygodTab> {
           }
           final benefits = snap.data!.$1;
           final cash = snap.data!.$2;
-          final rec = snap.data!.$3;
 
           return ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             children: [
-              sectionTitle('Выгоды сообществ'),
-              if (benefits.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text('Пока нет доступных предложений.'),
-                )
-              else
-                ...benefits.map(_benefitCard),
               sectionTitle('Уже начислено'),
               const SizedBox(height: 8),
               if (cash.isEmpty)
@@ -74,22 +63,14 @@ class _VygodTabState extends State<VygodTab> {
                 )
               else
                 ...cash.map(_cashCard),
-              sectionTitle('Статистика трат'),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
-                  'Показываем места, где вы тратите больше всего.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                ),
-              ),
-              const SizedBox(height: 4),
-              if (rec.isEmpty)
+              sectionTitle('Кэшбэки сообществ'),
+              if (benefits.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(12),
-                  child: Text('Недостаточно данных по тратам'),
+                  child: Text('Пока нет доступных предложений.'),
                 )
               else
-                ...rec.map(_recCard),
+                ...benefits.map(_benefitCard),
             ],
           );
         },
@@ -135,18 +116,4 @@ class _VygodTabState extends State<VygodTab> {
     );
   }
 
-  Widget _recCard(RecommendItem r) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ListTile(
-        title: Text(r.placeName),
-        subtitle: Text(
-          '${r.category} · покупок: ${r.operationCount}, '
-          'сумма: ${r.totalAmount.toStringAsFixed(0)} ₽',
-        ),
-        trailing: const Icon(Icons.store, color: vtbBlue),
-      ),
-    );
-  }
 }

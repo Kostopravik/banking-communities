@@ -1,17 +1,53 @@
 # bank_communities_app
 
-A new Flutter project.
+Мобильное приложение (Flutter) + backend (FastAPI) + PostgreSQL + Neo4j.
 
-## Getting Started
+### Запуск через Docker
 
-This project is a starting point for a Flutter application.
+#### Что нужно установить
 
-A few resources to get you started if this is your first Flutter project:
+- Docker Desktop (с Docker Compose)
+- Flutter SDK 3.x (только для запуска мобильного клиента)
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Важно: **PostgreSQL и Neo4j отдельно ставить не нужно** при запуске через Docker.  
+Они поднимутся как контейнеры из `docker-compose.yml`.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+#### 1) Клонировать репозиторий
+
+`git clone <URL_ВАШЕГО_РЕПО>`
+
+`cd banking-communities-main/banking-communities-main`
+
+#### 2) Поднять backend + базы
+
+`docker compose up -d --build`
+
+#### 3) Заполнить БД тестовыми данными
+
+`docker compose exec backend python /db/seed_all.py`
+
+#### 4) Проверить, что API работает
+
+- Swagger: [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs)
+- Health: [http://127.0.0.1:8001/health](http://127.0.0.1:8001/health)
+
+#### 5) Запустить Flutter-клиент
+
+`cd mobile`
+
+`flutter pub get`
+
+`flutter run`
+
+### Тестовые пользователи
+
+- `anna`
+- `boris`
+- `elena`
+- `dmitry`
+- `maria`
+- `igor`
+
+Пароль для всех: `pass123`
+
+---
