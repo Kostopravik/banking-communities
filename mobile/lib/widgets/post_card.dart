@@ -62,6 +62,78 @@ class _PostCardState extends State<PostCard> {
   int? _replyToId;
   String? _replyToName;
 
+  Future<void> _editPost(ApiClient api) async {
+    final titleController = TextEditingController(text: widget.post.title ?? '');
+    final textController = TextEditingController(text: widget.post.text ?? '');
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Редактировать пост'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(labelText: 'Заголовок'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: textController,
+              decoration: const InputDecoration(labelText: 'Текст'),
+              minLines: 3,
+              maxLines: 6,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+    if (saved != true) return;
+    final t = titleController.text.trim();
+    final b = textController.text.trim();
+    if (t.isEmpty || b.isEmpty) return;
+    try {
+      await api.updatePost(postId: widget.post.id, title: t, text: b);
+      if (mounted) widget.onChanged?.call();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.body)));
+      }
+    }
+  }
+
+  Future<void> _deletePost(ApiClient api) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Удалить пост?'),
+        content: const Text('Действие нельзя отменить.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Отмена')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Удалить')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await api.deletePost(widget.post.id);
+      if (mounted) widget.onChanged?.call();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.body)));
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -158,6 +230,8 @@ class _PostCardState extends State<PostCard> {
   @override
   Widget build(BuildContext context) {
     final api = context.read<AuthProvider>().api;
+    final myId = context.read<AuthProvider>().user?.id;
+    final canManagePost = myId != null && myId == widget.post.idSender;
     final title = widget.post.title ?? '';
     final body = widget.post.text ?? '';
 
@@ -188,6 +262,37 @@ class _PostCardState extends State<PostCard> {
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.post.senderName,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        _formatWhen(widget.post.createdAt),
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                ),
+                if (canManagePost)
+                  PopupMenuButton<String>(
+                    onSelected: (v) {
+                      if (v == 'edit') {
+                        _editPost(api);
+                      } else if (v == 'delete') {
+                        _deletePost(api);
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: 'edit', child: Text('Редактировать')),
+                      PopupMenuItem(value: 'delete', child: Text('Удалить')),
+                    ],
+                  ),
               ],
             ),
             const SizedBox(height: 10),
@@ -252,7 +357,7 @@ class _PostCardState extends State<PostCard> {
                   ),
                 )
               else
-                ..._orderedForDisplay(_comments).map((c) => _commentBlock(c, api)),
+                ..._orderedForDisplay(_comments).map((c) => _commentBlock(c, api, myId)),
               if (_replyToId != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
@@ -332,8 +437,53 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  Widget _commentBlock(CommentDto c, ApiClient api) {
+  Future<void> _editComment(ApiClient api, CommentDto c) async {
+    final controller = TextEditingController(text: c.message);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Редактировать комментарий'),
+        content: TextField(
+          controller: controller,
+          minLines: 2,
+          maxLines: 5,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Отмена')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Сохранить')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final text = controller.text.trim();
+    if (text.isEmpty) return;
+    try {
+      await api.updatePostComment(postId: widget.post.id, commentId: c.id, message: text);
+      final list = await api.postComments(widget.post.id);
+      if (mounted) setState(() => _comments = list);
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.body)));
+      }
+    }
+  }
+
+  Future<void> _deleteComment(ApiClient api, CommentDto c) async {
+    try {
+      await api.deletePostComment(postId: widget.post.id, commentId: c.id);
+      final list = await api.postComments(widget.post.id);
+      if (mounted) setState(() => _comments = list);
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.body)));
+      }
+    }
+  }
+
+  Widget _commentBlock(CommentDto c, ApiClient api, int? myId) {
     final isReply = c.idParent != null;
+    final canManage = myId != null && c.idSender == myId;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: EdgeInsets.only(
@@ -386,17 +536,36 @@ class _PostCardState extends State<PostCard> {
                   ],
                 ),
               ),
-              TextButton(
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                onPressed: () => setState(() {
-                  _replyToId = c.id;
-                  _replyToName = c.senderName;
-                }),
-                child: const Text('Ответить', style: TextStyle(fontSize: 12)),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () => setState(() {
+                      _replyToId = c.id;
+                      _replyToName = c.senderName;
+                    }),
+                    child: const Text('Ответить', style: TextStyle(fontSize: 12)),
+                  ),
+                  if (canManage)
+                    PopupMenuButton<String>(
+                      onSelected: (v) {
+                        if (v == 'edit') {
+                          _editComment(api, c);
+                        } else if (v == 'delete') {
+                          _deleteComment(api, c);
+                        }
+                      },
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(value: 'edit', child: Text('Изменить')),
+                        PopupMenuItem(value: 'delete', child: Text('Удалить')),
+                      ],
+                    ),
+                ],
               ),
             ],
           ),

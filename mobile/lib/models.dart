@@ -70,6 +70,7 @@ class PostDto {
   PostDto({
     required this.id,
     required this.idSender,
+    required this.senderName,
     required this.idCommunity,
     required this.title,
     required this.text,
@@ -81,6 +82,7 @@ class PostDto {
 
   final int id;
   final int idSender;
+  final String senderName;
   final int idCommunity;
   final String? title;
   final String? text;
@@ -93,6 +95,7 @@ class PostDto {
     return PostDto(
       id: j['id'] as int,
       idSender: j['id_sender'] as int,
+      senderName: j['sender_name'] as String? ?? 'Пользователь',
       idCommunity: j['id_community'] as int,
       title: j['title'] as String?,
       text: j['text'] as String?,

@@ -60,7 +60,6 @@ CREATE TABLE IF NOT EXISTS comment (
     id_sender INT NOT NULL,
     id_parent INT,
     message TEXT,
-    rating INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW(),
     FOREIGN KEY (id_post) REFERENCES post(id) ON DELETE CASCADE,
     FOREIGN KEY (id_sender) REFERENCES client(id) ON DELETE CASCADE,

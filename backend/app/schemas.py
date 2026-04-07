@@ -83,6 +83,7 @@ class BenefitOut(BaseModel):
 class PostOut(BaseModel):
     id: int
     id_sender: int
+    sender_name: str
     id_community: int
     title: str | None
     text: str | None
@@ -111,3 +112,12 @@ class CommentOut(BaseModel):
 class CommentCreate(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
     parent_id: int | None = Field(None, ge=1)
+
+
+class PostUpdate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=225)
+    text: str = Field(..., min_length=1, max_length=8000)
+
+
+class CommentUpdate(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000)

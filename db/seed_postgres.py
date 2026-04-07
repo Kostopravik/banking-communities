@@ -42,6 +42,24 @@ def _cashback_percent_for_key(category_key: str | None) -> int:
     return 3
 
 
+def _community_description(name: str, min_pct: int, max_pct: int) -> str:
+    if name == "Здоровье":
+        return f"Для тех, кто заботится о себе: аптеки, анализы и полезные сервисы. Кэшбэк до {max_pct}%."
+    if name == "Фитнес":
+        return f"Для тех, кто в движении: спортзалы, тренировки и активный образ жизни. Кэшбэк до {max_pct}%."
+    if name == "Кафе и рестораны":
+        return f"Для любителей вкусно поесть вне дома. Кэшбэк до {max_pct}%."
+    if name == "Супермаркеты":
+        return f"Для повседневных покупок и семейного бюджета. Кэшбэк до {max_pct}%."
+    if name == "Красота":
+        return f"Для ухода за собой и приятных бьюти-покупок. Кэшбэк до {max_pct}%."
+    if name == "АЗС":
+        return f"Для тех, кто часто за рулем. Кэшбэк до {max_pct}%."
+    if min_pct == max_pct:
+        return f"Выгоды и бонусы для участников сообщества «{name}». Кэшбэк до {max_pct}%."
+    return f"Выгоды и бонусы для участников сообщества «{name}». Кэшбэк до {max_pct}%."
+
+
 def seed() -> None:
     conn = psycopg2.connect(
         host=POSTGRES_HOST,
@@ -83,10 +101,10 @@ def seed() -> None:
 
         communities: list[tuple[str, str, str]] = []
         for c in MCC_CATEGORIES:
-            desc = f"Сообщество по категории «{c.name_ru}». Кэшбэк {c.cashback_min}–{c.cashback_max}%."
+            desc = _community_description(c.name_ru, c.cashback_min, c.cashback_max)
             communities.append((c.name_ru, desc, c.key))
         for ic in INTEREST_COMMUNITIES:
-            desc = f"Интерес по транзакциям (MCC {ic['mcc_hint']})."
+            desc = f"Для тех, кому близка тема «{ic['name']}». Делитесь опытом и получайте выгоды."
             communities.append((ic["name"], desc, ic["category_key"]))
 
         execute_values(
@@ -247,7 +265,7 @@ def seed() -> None:
         for amount, place in cashback_rows:
             cat = category_by_mcc(place)
             ck = cat.key if cat else None
-            label = f"MCC {place} · {cat.name_ru}" if cat else f"MCC {place}"
+            label = cat.name_ru if cat else "Партнерские покупки"
             cur.execute(
                 """
                 INSERT INTO cashback (amount, place, category_key, category_label)

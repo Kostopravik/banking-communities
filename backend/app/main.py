@@ -13,12 +13,14 @@ from app.schemas import (
     CashbackOut,
     CommentCreate,
     CommentOut,
+    CommentUpdate,
     CommunitiesOverviewResponse,
     CommunityOut,
     CommunityOverviewOut,
     LoginRequest,
     PostCreate,
     PostOut,
+    PostUpdate,
     TokenResponse,
     UserPublic,
 )
@@ -222,15 +224,15 @@ def join_community(
         if not ck:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="У сообщества нет категории MCC",
+                detail="У сообщества не настроены условия вступления",
             )
         cnt = neo4j_user_category_operations(user["id"], ck)
         if cnt < MCC_OPS_REQUIRED:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
-                    f"Нужно минимум {MCC_OPS_REQUIRED} операций в категории MCC "
-                    f"(сейчас {cnt})"
+                    f"Для вступления нужно еще {MCC_OPS_REQUIRED - cnt} покупок "
+                    f"в этой категории (сейчас {cnt} из {MCC_OPS_REQUIRED})"
                 ),
             )
         cur.execute(
@@ -321,16 +323,14 @@ def cashback_opportunities(user: Annotated[dict, Depends(get_current_user)]):
             need = max(0, MCC_OPS_REQUIRED - ops)
             eligible = ops >= MCC_OPS_REQUIRED
             accrued = cid in accrued_ids
-            label = d.get("category_label") or f"MCC {d['place']}"
+            label = d.get("category_label") or "Категория без названия"
             if eligible:
                 hint = (
-                    "Условие по операциям выполнено (≥3 в категории). "
-                    + ("Начисление есть в «Мои кэшбэки»." if accrued else "Можно оформить начисление в банке (MVP).")
+                    "Условие выполнено. "
+                    + ("Кэшбэк уже начислен." if accrued else "Кэшбэк доступен к активации.")
                 )
             else:
-                hint = (
-                    f"Нужно ещё {need} операций в категории MCC «{ck or '?'}» по данным графа Neo4j."
-                )
+                hint = f"Сделайте еще {need} покупки в этой категории, чтобы открыть кэшбэк."
             out.append(
                 CashbackOpportunityOut(
                     id=cid,
@@ -386,8 +386,7 @@ def my_benefits(user: Annotated[dict, Depends(get_current_user)]):
                 hint = "Активно — вы в сообществе"
             elif need > 0:
                 hint = (
-                    f"Вступите в «{name}». Нужно ещё {need} операций "
-                    f"в категории MCC (в графе Neo4j)."
+                    f"Сначала выполните условие вступления: еще {need} покупок в категории сообщества."
                 )
             else:
                 hint = f"Вступите в сообщество «{name}», чтобы активировать выгоду."
@@ -442,9 +441,11 @@ def create_post(
         row = cur.fetchone()
         conn.commit()
         ca = row["created_at"]
+        sender_name = _client_display_name(user)
         return PostOut(
             id=row["id"],
             id_sender=uid,
+            sender_name=sender_name,
             id_community=body.id_community,
             title=body.title.strip(),
             text=body.text.strip(),
@@ -477,6 +478,7 @@ def list_posts(
                 """
                 SELECT p.id, p.id_sender, p.id_community, p.title, p.text,
                        p.rating, p.created_at,
+                       cl.first_name, cl.last_name, cl.login,
                        (SELECT COUNT(*)::int FROM post_like pl WHERE pl.id_post = p.id)
                            AS like_count,
                        EXISTS(
@@ -484,6 +486,7 @@ def list_posts(
                            WHERE pl.id_post = p.id AND pl.id_client = %s
                        ) AS liked_by_me
                 FROM post p
+                JOIN client cl ON cl.id = p.id_sender
                 ORDER BY p.created_at DESC
                 """,
                 (uid,),
@@ -493,6 +496,7 @@ def list_posts(
                 """
                 SELECT p.id, p.id_sender, p.id_community, p.title, p.text,
                        p.rating, p.created_at,
+                       cl.first_name, cl.last_name, cl.login,
                        (SELECT COUNT(*)::int FROM post_like pl WHERE pl.id_post = p.id)
                            AS like_count,
                        EXISTS(
@@ -500,6 +504,7 @@ def list_posts(
                            WHERE pl.id_post = p.id AND pl.id_client = %s
                        ) AS liked_by_me
                 FROM post p
+                JOIN client cl ON cl.id = p.id_sender
                 WHERE p.id_community = %s
                 ORDER BY p.created_at DESC
                 """,
@@ -514,6 +519,7 @@ def list_posts(
                 PostOut(
                     id=d["id"],
                     id_sender=d["id_sender"],
+                    sender_name=_client_display_name(d),
                     id_community=d["id_community"],
                     title=d["title"],
                     text=d["text"],
@@ -526,6 +532,108 @@ def list_posts(
         return out
     finally:
         conn.close()
+
+
+@app.put("/posts/{post_id}", response_model=PostOut)
+def update_post(
+    post_id: int,
+    body: PostUpdate,
+    user: Annotated[dict, Depends(get_current_user)],
+):
+    conn = get_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """
+            SELECT p.id, p.id_sender, p.id_community, p.rating, p.created_at,
+                   cl.first_name, cl.last_name, cl.login
+            FROM post p
+            JOIN client cl ON cl.id = p.id_sender
+            WHERE p.id = %s
+            """,
+            (post_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Пост не найден")
+        if row["id_sender"] != user["id"]:
+            raise HTTPException(status_code=403, detail="Можно редактировать только свои посты")
+        cur.execute(
+            """
+            UPDATE post
+            SET title = %s, text = %s
+            WHERE id = %s
+            """,
+            (body.title.strip(), body.text.strip(), post_id),
+        )
+        cur.execute(
+            """
+            SELECT COUNT(*)::int AS cnt
+            FROM post_like
+            WHERE id_post = %s
+            """,
+            (post_id,),
+        )
+        like_row = cur.fetchone()
+        like_count = int(like_row["cnt"]) if like_row else 0
+        cur.execute(
+            """
+            SELECT 1
+            FROM post_like
+            WHERE id_post = %s AND id_client = %s
+            """,
+            (post_id, user["id"]),
+        )
+        liked_by_me = cur.fetchone() is not None
+        conn.commit()
+        ca = row["created_at"]
+        return PostOut(
+            id=row["id"],
+            id_sender=row["id_sender"],
+            sender_name=_client_display_name(dict(row)),
+            id_community=row["id_community"],
+            title=body.title.strip(),
+            text=body.text.strip(),
+            rating=row["rating"] or 0,
+            created_at=ca.isoformat() if ca is not None else None,
+            like_count=like_count,
+            liked_by_me=liked_by_me,
+        )
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@app.delete("/posts/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_post(
+    post_id: int,
+    user: Annotated[dict, Depends(get_current_user)],
+):
+    conn = get_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT id_sender FROM post WHERE id = %s", (post_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Пост не найден")
+        if row["id_sender"] != user["id"]:
+            raise HTTPException(status_code=403, detail="Можно удалять только свои посты")
+        cur.execute("DELETE FROM post WHERE id = %s", (post_id,))
+        conn.commit()
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    return None
 
 
 @app.post("/posts/{post_id}/like", response_model=dict)
@@ -714,6 +822,107 @@ def create_comment(
         raise
     finally:
         conn.close()
+
+
+@app.put("/posts/{post_id}/comments/{comment_id}", response_model=CommentOut)
+def update_comment(
+    post_id: int,
+    comment_id: int,
+    body: CommentUpdate,
+    user: Annotated[dict, Depends(get_current_user)],
+):
+    conn = get_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """
+            SELECT c.id, c.id_post, c.id_sender, c.id_parent, c.created_at
+            FROM comment c
+            WHERE c.id = %s AND c.id_post = %s
+            """,
+            (comment_id, post_id),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Комментарий не найден")
+        if row["id_sender"] != user["id"]:
+            raise HTTPException(status_code=403, detail="Можно редактировать только свои комментарии")
+        cur.execute(
+            """
+            UPDATE comment
+            SET message = %s
+            WHERE id = %s
+            """,
+            (body.message.strip(), comment_id),
+        )
+        reply_to_name = None
+        if row["id_parent"] is not None:
+            cur.execute(
+                """
+                SELECT cl.first_name, cl.last_name, cl.login
+                FROM comment c
+                JOIN client cl ON cl.id = c.id_sender
+                WHERE c.id = %s
+                """,
+                (row["id_parent"],),
+            )
+            pr = cur.fetchone()
+            if pr:
+                reply_to_name = _client_display_name(dict(pr))
+        conn.commit()
+        ca = row["created_at"]
+        return CommentOut(
+            id=comment_id,
+            id_sender=user["id"],
+            sender_name=_client_display_name(user),
+            message=body.message.strip(),
+            created_at=ca.isoformat() if ca is not None else None,
+            id_parent=row["id_parent"],
+            reply_to_name=reply_to_name,
+        )
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@app.delete("/posts/{post_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_comment(
+    post_id: int,
+    comment_id: int,
+    user: Annotated[dict, Depends(get_current_user)],
+):
+    conn = get_connection()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """
+            SELECT id_sender
+            FROM comment
+            WHERE id = %s AND id_post = %s
+            """,
+            (comment_id, post_id),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Комментарий не найден")
+        if row["id_sender"] != user["id"]:
+            raise HTTPException(status_code=403, detail="Можно удалять только свои комментарии")
+        cur.execute("DELETE FROM comment WHERE id = %s", (comment_id,))
+        conn.commit()
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    return None
 
 
 @app.get("/users/me/communities", response_model=list[CommunityOut])

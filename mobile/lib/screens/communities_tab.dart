@@ -78,6 +78,10 @@ class _CommunitiesTabState extends State<CommunitiesTab> {
               sectionTitle('Ваши'),
               ...joined.map(
                 (c) => ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: vtbBlue.withOpacity(0.12),
+                    child: const Icon(Icons.groups, color: vtbBlue),
+                  ),
                   title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: c.description != null && c.description!.isNotEmpty
                       ? Text(
@@ -97,6 +101,10 @@ class _CommunitiesTabState extends State<CommunitiesTab> {
               sectionTitle('Можете вступить'),
               ...available.map(
                 (c) => ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.green.withOpacity(0.12),
+                    child: const Icon(Icons.group_add, color: Colors.green),
+                  ),
                   title: Text(c.name),
                   onTap: () => Navigator.push(
                     context,
@@ -113,17 +121,24 @@ class _CommunitiesTabState extends State<CommunitiesTab> {
               sectionTitle('Недоступные'),
               ...locked.map(
                 (c) => ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.grey.shade200,
+                    child: Icon(Icons.lock_outline, color: Colors.grey.shade600),
+                  ),
                   title: Text(c.name),
                   subtitle: Text(
-                    'В категории MCC: ${c.categoryOperationsCount}/${c.mccOperationsRequired}. '
-                    'Не хватает ещё ${c.transactionsNeeded} операций (Neo4j).',
+                    'Пока недоступно. Чтобы вступить, нужно еще '
+                    '${c.transactionsNeeded} покупок в категории этого сообщества.',
                   ),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => CommunityDetailScreen(community: c),
-                    ),
-                  ),
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Чтобы получать выгоды и писать посты, сначала вступите в сообщество.',
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ],

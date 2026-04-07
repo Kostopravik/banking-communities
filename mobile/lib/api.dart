@@ -94,6 +94,32 @@ class ApiClient {
     return PostDto.fromJson(jsonDecode(r.body) as Map<String, dynamic>);
   }
 
+  Future<PostDto> updatePost({
+    required int postId,
+    required String title,
+    required String text,
+  }) async {
+    final r = await http.put(
+      Uri.parse('$baseUrl/posts/$postId'),
+      headers: _headers(jsonBody: true),
+      body: jsonEncode({'title': title, 'text': text}),
+    );
+    if (r.statusCode != 200) {
+      throw ApiException(r.statusCode, r.body);
+    }
+    return PostDto.fromJson(jsonDecode(r.body) as Map<String, dynamic>);
+  }
+
+  Future<void> deletePost(int postId) async {
+    final r = await http.delete(
+      Uri.parse('$baseUrl/posts/$postId'),
+      headers: _headers(),
+    );
+    if (r.statusCode != 204 && r.statusCode != 200) {
+      throw ApiException(r.statusCode, r.body);
+    }
+  }
+
   Future<List<PostDto>> posts({int? communityId}) async {
     final uri = communityId == null
         ? Uri.parse('$baseUrl/posts')
@@ -224,5 +250,36 @@ class ApiClient {
     return CommentDto.fromJson(
       jsonDecode(r.body) as Map<String, dynamic>,
     );
+  }
+
+  Future<CommentDto> updatePostComment({
+    required int postId,
+    required int commentId,
+    required String message,
+  }) async {
+    final r = await http.put(
+      Uri.parse('$baseUrl/posts/$postId/comments/$commentId'),
+      headers: _headers(jsonBody: true),
+      body: jsonEncode({'message': message}),
+    );
+    if (r.statusCode != 200) {
+      throw ApiException(r.statusCode, r.body);
+    }
+    return CommentDto.fromJson(
+      jsonDecode(r.body) as Map<String, dynamic>,
+    );
+  }
+
+  Future<void> deletePostComment({
+    required int postId,
+    required int commentId,
+  }) async {
+    final r = await http.delete(
+      Uri.parse('$baseUrl/posts/$postId/comments/$commentId'),
+      headers: _headers(),
+    );
+    if (r.statusCode != 204 && r.statusCode != 200) {
+      throw ApiException(r.statusCode, r.body);
+    }
   }
 }

@@ -15,14 +15,14 @@ class VygodTab extends StatefulWidget {
 class _VygodTabState extends State<VygodTab> {
   int _key = 0;
 
-  Future<(List<CashbackOpportunityDto>, List<RecommendItem>, List<CashbackDto>)> _load(
+  Future<(List<BenefitDto>, List<CashbackDto>, List<RecommendItem>)> _load(
     AuthProvider auth,
   ) async {
     final api = auth.api;
-    final opps = await api.cashbackOpportunities();
-    final rec = await api.recommendMe();
+    final benefits = await api.myBenefits();
     final cash = await api.myCashback();
-    return (opps, rec, cash);
+    final rec = await api.recommendMe();
+    return (benefits, cash, rec);
   }
 
   @override
@@ -31,7 +31,8 @@ class _VygodTabState extends State<VygodTab> {
 
     return RefreshIndicator(
       onRefresh: () async => setState(() => _key++),
-      child: FutureBuilder<(List<CashbackOpportunityDto>, List<RecommendItem>, List<CashbackDto>)>(
+      child: FutureBuilder<
+          (List<BenefitDto>, List<CashbackDto>, List<RecommendItem>)>(
         key: ValueKey(_key),
         future: _load(auth),
         builder: (context, snap) {
@@ -49,59 +50,35 @@ class _VygodTabState extends State<VygodTab> {
               ],
             );
           }
-          final opps = snap.data!.$1;
-          final rec = snap.data!.$2;
-          final cash = snap.data!.$3;
-          final unlocked = opps.where((o) => o.eligible).toList();
-          final locked = opps.where((o) => !o.eligible).toList();
+          final benefits = snap.data!.$1;
+          final cash = snap.data!.$2;
+          final rec = snap.data!.$3;
 
           return ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             children: [
-              _infoCard(
-                title: 'Как устроено',
-                body:
-                    'Приложение на Flutter ходит только в FastAPI. Neo4j и PostgreSQL '
-                    'на сервере; прямого доступа из Dart к графу нет.\n\n'
-                    '• Кэшбэки по MCC — из PostgreSQL, «открываются», когда в Neo4j '
-                    '≥3 отдельных операции в той же MCC-категории.\n'
-                    '• Начисленный кэшбэк — записи из БД (симуляция уже зачисленного).\n'
-                    '• Рекомендации по тратам — из Neo4j: магазины, куда вы '
-                    'часто ходите (≥3 покупок = ≥3 рёбер в графе), чтобы предложить акции.',
-              ),
-              sectionTitle('Кэшбэки по MCC (≥3 операций в категории)'),
-              if (unlocked.isEmpty)
+              sectionTitle('Выгоды сообществ'),
+              if (benefits.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(12),
-                  child: Text('Пока нет категорий с 3+ операциями по данным графа.'),
+                  child: Text('Пока нет доступных предложений.'),
                 )
               else
-                ...unlocked.map(_oppUnlockedCard),
-              sectionTitle('Пока недоступны (мало операций в категории)'),
-              ...locked.map((o) => _oppLockedCard(context, o)),
-              sectionTitle('Начисленный кэшбэк (уже в вашей истории)'),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
-                  'Это не «следующая трата после вступления», а тестовые строки в БД: '
-                  'связь client ↔ cashback. В продукте сюда попадали бы реальные начисления.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                ),
-              ),
+                ...benefits.map(_benefitCard),
+              sectionTitle('Уже начислено'),
               const SizedBox(height: 8),
               if (cash.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(12),
-                  child: Text('Нет записей client_cashback'),
+                  child: Text('Пока начислений нет'),
                 )
               else
                 ...cash.map(_cashCard),
-              sectionTitle('Рекомендации по тратам (Neo4j)'),
+              sectionTitle('Статистика трат'),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Text(
-                  'Для чего: подсказать персональные предложения по местам, '
-                  'куда вы уже много платите (частые отдельные покупки в графе).',
+                  'Показываем места, где вы тратите больше всего.',
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                 ),
               ),
@@ -109,7 +86,7 @@ class _VygodTabState extends State<VygodTab> {
               if (rec.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(12),
-                  child: Text('Нет мест с ≥3 отдельными операциями'),
+                  child: Text('Недостаточно данных по тратам'),
                 )
               else
                 ...rec.map(_recCard),
@@ -120,63 +97,22 @@ class _VygodTabState extends State<VygodTab> {
     );
   }
 
-  Widget _infoCard({required String title, required String body}) {
-    return Card(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-      elevation: 0,
-      color: Colors.blue.shade50,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 8),
-            Text(body, style: TextStyle(fontSize: 13, height: 1.4, color: Colors.grey.shade900)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _oppUnlockedCard(CashbackOpportunityDto o) {
+  Widget _benefitCard(BenefitDto b) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ListTile(
-        title: Text(o.categoryLabel ?? 'MCC ${o.placeMcc}'),
-        subtitle: Text(
-          'Операций в категории: ${o.operationsInCategory}/${o.operationsRequired}. '
-          '${o.accrued ? "Начисление есть" : "Начисление не привязано (MVP)"}',
-        ),
+        title: Text(b.communityName),
+        subtitle: Text('${b.title}\n${b.hint}'),
+        isThreeLine: true,
         trailing: Text(
-          '${o.amount.toStringAsFixed(0)} ₽',
-          style: const TextStyle(
-            color: Colors.green,
+          '${b.percent}%',
+          style: TextStyle(
+            color: b.isActive ? Colors.green : Colors.grey.shade600,
             fontWeight: FontWeight.bold,
-            fontSize: 16,
+            fontSize: 18,
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _oppLockedCard(BuildContext context, CashbackOpportunityDto o) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ListTile(
-        title: Text(o.categoryLabel ?? 'MCC ${o.placeMcc}'),
-        subtitle: Text(
-          '${o.operationsInCategory}/${o.operationsRequired} операций в категории',
-        ),
-        trailing: const Icon(Icons.lock_outline, color: Colors.grey),
-        onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(o.hint), duration: const Duration(seconds: 5)),
-          );
-        },
       ),
     );
   }
@@ -186,7 +122,7 @@ class _VygodTabState extends State<VygodTab> {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ListTile(
-        title: Text(c.categoryLabel ?? 'MCC ${c.place}'),
+        title: Text(c.categoryLabel ?? 'Партнерский кэшбэк'),
         subtitle: Text(c.createdAt ?? ''),
         trailing: Text(
           '${c.amount.toStringAsFixed(0)} ₽',
@@ -206,7 +142,7 @@ class _VygodTabState extends State<VygodTab> {
       child: ListTile(
         title: Text(r.placeName),
         subtitle: Text(
-          '${r.category} · отдельных операций: ${r.operationCount}, '
+          '${r.category} · покупок: ${r.operationCount}, '
           'сумма: ${r.totalAmount.toStringAsFixed(0)} ₽',
         ),
         trailing: const Icon(Icons.store, color: vtbBlue),
