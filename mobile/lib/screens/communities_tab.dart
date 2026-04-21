@@ -127,11 +127,22 @@ class _CommunitiesTabState extends State<CommunitiesTab> {
                 ),
               ),
               sectionTitle('Недоступные'),
+              const Padding(
+                padding: EdgeInsets.only(left: 16, right: 16, bottom: 8, top: 4),
+                child: Text(
+                  'Чтобы получать выгоды и писать посты, сначала вступите в сообщество.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
               ...locked.map(
                 (c) => ListTile(
                   leading: CircleAvatar(
                     backgroundColor: Colors.grey.shade200,
-                    child: Icon(Icons.lock_outline, color: Colors.grey.shade600),
+                    child: Icon(Icons.groups, color: Colors.grey.shade600),
                   ),
                   title: Text(c.name),
                   subtitle: Text(

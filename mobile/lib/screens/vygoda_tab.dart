@@ -15,13 +15,14 @@ class VygodTab extends StatefulWidget {
 class _VygodTabState extends State<VygodTab> {
   int _key = 0;
 
-  Future<(List<BenefitDto>, List<CashbackDto>)> _load(
+  Future<(List<BenefitDto>, List<CashbackDto>, List<CashbackOpportunityDto>)> _load(
     AuthProvider auth,
   ) async {
     final api = auth.api;
     final benefits = await api.myBenefits();
     final cash = await api.myCashback();
-    return (benefits, cash);
+    final opportunities = await api.cashbackOpportunities();
+    return (benefits, cash, opportunities);
   }
 
   @override
@@ -30,7 +31,7 @@ class _VygodTabState extends State<VygodTab> {
 
     return RefreshIndicator(
       onRefresh: () async => setState(() => _key++),
-      child: FutureBuilder<(List<BenefitDto>, List<CashbackDto>)>(
+      child: FutureBuilder<(List<BenefitDto>, List<CashbackDto>, List<CashbackOpportunityDto>)>(
         key: ValueKey(_key),
         future: _load(auth),
         builder: (context, snap) {
@@ -50,10 +51,21 @@ class _VygodTabState extends State<VygodTab> {
           }
           final benefits = snap.data!.$1;
           final cash = snap.data!.$2;
+          final opportunities = snap.data!.$3;
+
+          // Разделяем на активные/доступные (зелёные) и неактивные/недоступные (серые)
+          final activeBenefits = benefits.where((b) => b.isActive).toList();
+          final inactiveBenefits = benefits.where((b) => !b.isActive).toList();
+          
+          final availableOpportunities = opportunities.where((o) => o.eligible).toList()
+            ..sort((a, b) => a.id.compareTo(b.id));
+          final unavailableOpportunities = opportunities.where((o) => !o.eligible).toList()
+            ..sort((a, b) => a.id.compareTo(b.id));
 
           return ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             children: [
+              // === СЕКЦИЯ 1: Уже начислено ===
               sectionTitle('Уже начислено'),
               const SizedBox(height: 8),
               if (cash.isEmpty)
@@ -63,17 +75,162 @@ class _VygodTabState extends State<VygodTab> {
                 )
               else
                 ...cash.map(_cashCard),
-              sectionTitle('Кэшбэки сообществ'),
-              if (benefits.isEmpty)
+              
+              const SizedBox(height: 16),
+              
+              // === СЕКЦИЯ 2: ВСЕ ДОСТУПНЫЕ ПРЕДЛОЖЕНИЯ (зелёные) ===
+              if (activeBenefits.isNotEmpty || availableOpportunities.isNotEmpty) ...[
+                sectionTitle('Доступные предложения'),
+                
+                // Активные кэшбэки сообществ (с процентами)
+                if (activeBenefits.isNotEmpty) ...[
+                  const Padding(
+                    padding: EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 4),
+                    child: Text(
+                      'Кэшбэк сообществ',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.green,
+                      ),
+                    ),
+                  ),
+                  ...activeBenefits.map(_benefitCard),
+                ],
+                
+                // Доступные кэшбэки из каталога
+                if (availableOpportunities.isNotEmpty) ...[
+                  const Padding(
+                    padding: EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 4),
+                    child: Text(
+                      'Партнёрский кэшбэк',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.green,
+                      ),
+                    ),
+                  ),
+                  ...availableOpportunities.map(_opportunityCard),
+                ],
+              ],
+              
+              const SizedBox(height: 16),
+              
+              // === СЕКЦИЯ 3: ВСЕ НЕДОСТУПНЫЕ ПРЕДЛОЖЕНИЯ (серые) ===
+              if (inactiveBenefits.isNotEmpty || unavailableOpportunities.isNotEmpty) ...[
+                sectionTitle('Недоступные предложения'),
                 const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text('Пока нет доступных предложений.'),
-                )
-              else
-                ...benefits.map(_benefitCard),
+                  padding: EdgeInsets.only(left: 16, right: 16, bottom: 8, top: 4),
+                  child: Text(
+                    'Выполните условия, чтобы открыть доступ',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+                
+                // Неактивные кэшбэки сообществ
+                if (inactiveBenefits.isNotEmpty) ...[
+                  const Padding(
+                    padding: EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 4),
+                    child: Text(
+                      'Кэшбэк сообществ',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
+                  ...inactiveBenefits.map(_benefitCard),
+                ],
+                
+                // Недоступные кэшбэки из каталога
+                if (unavailableOpportunities.isNotEmpty) ...[
+                  const Padding(
+                    padding: EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 4),
+                    child: Text(
+                      'Партнёрский кэшбэк',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
+                  ...unavailableOpportunities.map(_opportunityCard),
+                ],
+              ],
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _opportunityCard(CashbackOpportunityDto o) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: o.eligible 
+              ? Colors.green.withOpacity(0.12) 
+              : Colors.grey.shade200,
+          child: Icon(
+            o.eligible ? Icons.check_circle : Icons.local_offer,
+            color: o.eligible ? Colors.green : Colors.grey.shade600,
+          ),
+        ),
+        title: Text(o.categoryLabel ?? 'Категория ${o.categoryKey}'),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(o.hint),
+            if (!o.eligible)
+              Text(
+                'Прогресс: ${o.operationsInCategory}/${o.operationsRequired} покупок',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+          ],
+        ),
+        isThreeLine: !o.eligible,
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '${o.amount.toStringAsFixed(0)} ₽',
+              style: TextStyle(
+                color: o.eligible ? Colors.green : Colors.grey.shade600,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+            if (o.accrued)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  'Начислен',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.green,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -83,16 +240,51 @@ class _VygodTabState extends State<VygodTab> {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ListTile(
-        title: Text(b.communityName),
-        subtitle: Text('${b.title}\n${b.hint}'),
-        isThreeLine: true,
-        trailing: Text(
-          '${b.percent}%',
-          style: TextStyle(
+        leading: CircleAvatar(
+          backgroundColor: b.isActive 
+              ? Colors.green.withOpacity(0.12) 
+              : Colors.grey.shade200,
+          child: Icon(
+            b.isActive ? Icons.card_giftcard : Icons.workspace_premium,
             color: b.isActive ? Colors.green : Colors.grey.shade600,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
           ),
+        ),
+        title: Text(b.communityName),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${b.title}'),
+            Text(
+              b.hint,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+        isThreeLine: true,
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '${b.percent}%',
+              style: TextStyle(
+                color: b.isActive ? Colors.green : Colors.grey.shade600,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+            if (!b.isActive && b.operationsNeededToJoin > 0)
+              Text(
+                '${b.operationsNeededToJoin} покуп.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -103,6 +295,10 @@ class _VygodTabState extends State<VygodTab> {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: Colors.green.withOpacity(0.12),
+          child: const Icon(Icons.payments, color: Colors.green),
+        ),
         title: Text(c.categoryLabel ?? 'Партнерский кэшбэк'),
         subtitle: Text(c.createdAt ?? ''),
         trailing: Text(
@@ -115,5 +311,4 @@ class _VygodTabState extends State<VygodTab> {
       ),
     );
   }
-
 }
