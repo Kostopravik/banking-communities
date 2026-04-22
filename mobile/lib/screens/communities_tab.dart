@@ -86,10 +86,12 @@ class _CommunitiesTabState extends State<CommunitiesTab> {
               sectionTitle('Ваши'),
               ...joined.map(
                 (c) => ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: vtbBlue.withOpacity(0.12),
-                    child: const Icon(Icons.groups, color: vtbBlue),
-                  ),
+                  leading: Hero(
+                    tag: 'community_${c.id}',
+                    child: CircleAvatar(
+                      backgroundColor: vtbBlue.withOpacity(0.12),
+                      child: const Icon(Icons.groups, color: vtbBlue),),
+                      ),
                   title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: c.description != null && c.description!.isNotEmpty
                       ? Text(

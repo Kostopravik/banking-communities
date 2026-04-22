@@ -78,6 +78,8 @@ class PostDto {
     required this.createdAt,
     this.likeCount = 0,
     this.likedByMe = false,
+    this.commentCount = 0,
+    this.isCommunityPost = false,
   });
 
   final int id;
@@ -90,6 +92,8 @@ class PostDto {
   final String? createdAt;
   final int likeCount;
   final bool likedByMe;
+  final int commentCount;
+  final bool isCommunityPost;
 
   factory PostDto.fromJson(Map<String, dynamic> j) {
     return PostDto(
@@ -103,6 +107,8 @@ class PostDto {
       createdAt: j['created_at'] as String?,
       likeCount: j['like_count'] as int? ?? 0,
       likedByMe: j['liked_by_me'] as bool? ?? false,
+      commentCount: j['comment_count'] as int? ?? 0,
+      isCommunityPost: j['id_sender'] == 0,
     );
   }
 }

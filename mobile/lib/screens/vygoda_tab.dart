@@ -205,26 +205,61 @@ class _VygodTabState extends State<VygodTab> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text(
-              '${o.amount.toStringAsFixed(0)} ₽',
-              style: TextStyle(
-                color: o.eligible ? Colors.green : Colors.grey.shade600,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
             if (o.accrued)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.green.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.check_circle,
+                      size: 14,
+                      color: Colors.green,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      'Начислен',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.green,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else if (o.eligible)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: vtbBlue.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Text(
-                  'Начислен',
+                  'Доступен',
                   style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.green,
+                    fontSize: 12,
+                    color: vtbBlue,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Недоступен',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
                     fontWeight: FontWeight.w600,
                   ),
                 ),

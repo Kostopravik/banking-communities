@@ -58,11 +58,14 @@ class _PostCardState extends State<PostCard> {
   late bool _liked;
   late String _titleText;
   late String _bodyText;
+  late int _commentCount;
   List<CommentDto> _comments = [];
   bool _loadingComments = false;
   bool _sending = false;
   int? _replyToId;
   String? _replyToName;
+  bool _loadingCommentCount = false;
+  bool get _isCommunityPost => widget.post.idSender == 0;
 
   Future<void> _editPost(ApiClient api) async {
     final titleController = TextEditingController(text: widget.post.title ?? '');
@@ -118,6 +121,27 @@ class _PostCardState extends State<PostCard> {
     }
   }
 
+  Future<void> _loadCommentCount() async {
+    if (_loadingCommentCount) return;
+    
+    setState(() => _loadingCommentCount = true);
+    
+    try {
+      final api = context.read<AuthProvider>().api;
+      final comments = await api.postComments(widget.post.id);
+      if (mounted) {
+        setState(() {
+          _commentCount = comments.length;
+          _loadingCommentCount = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _loadingCommentCount = false);
+      }
+    }
+  }
+
   Future<void> _deletePost(ApiClient api) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -148,6 +172,8 @@ class _PostCardState extends State<PostCard> {
     _liked = widget.post.likedByMe;
     _titleText = widget.post.title ?? '';
     _bodyText = widget.post.text ?? '';
+    _commentCount = widget.post.commentCount;
+    _loadCommentCount();
   }
 
   @override
@@ -158,10 +184,12 @@ class _PostCardState extends State<PostCard> {
       _liked = widget.post.likedByMe;
       _titleText = widget.post.title ?? '';
       _bodyText = widget.post.text ?? '';
+      _commentCount = widget.post.commentCount;
       _comments = [];
       _showComments = false;
       _replyToId = null;
       _replyToName = null;
+      _loadCommentCount();
     }
   }
 
@@ -175,12 +203,17 @@ class _PostCardState extends State<PostCard> {
     final willShow = !_showComments;
     setState(() => _showComments = willShow);
     if (!willShow) return;
+
+    await Future.delayed(const Duration(milliseconds: 50));
+    if (!mounted) return;
+
     setState(() => _loadingComments = true);
     try {
       final list = await api.postComments(widget.post.id);
       if (mounted) {
         setState(() {
           _comments = list;
+          _commentCount = list.length;
           _loadingComments = false;
         });
       }
@@ -221,6 +254,7 @@ class _PostCardState extends State<PostCard> {
       if (mounted) {
         setState(() {
           _comments = [..._comments, c];
+          _commentCount = _comments.length;
           _controller.clear();
           _replyToId = null;
           _replyToName = null;
@@ -273,15 +307,51 @@ class _PostCardState extends State<PostCard> {
                     ),
                   ),
                 ),
+                if (_isCommunityPost) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: vtbBlue.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.verified, size: 14, color: vtbBlue),
+                        SizedBox(width: 4),
+                        Text(
+                          'Официально',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: vtbBlue,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        widget.post.senderName,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          if (_isCommunityPost)
+                            const Icon(Icons.business_center, size: 16, color: vtbBlue)
+                          else
+                            const Icon(Icons.person, size: 16, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Text(
+                            widget.post.senderName,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: _isCommunityPost ? vtbBlue : null,
+                            ),
+                          ),
+                        ],
                       ),
                       Text(
                         _formatWhen(widget.post.createdAt),
@@ -353,93 +423,120 @@ class _PostCardState extends State<PostCard> {
                   onPressed: () => _openComments(api),
                   icon: Icon(_showComments ? Icons.expand_less : Icons.chat_bubble_outline,
                       color: vtbBlue, size: 20),
-                  label: Text(_showComments ? 'Скрыть' : 'Комментарии'),
+                  label: Row(
+                    children: [
+                      Text(_showComments ? 'Скрыть' : 'Комментарии'),
+                      if (_commentCount > 0) ...[
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: vtbBlue.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '$_commentCount',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: vtbBlue,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                   style: TextButton.styleFrom(foregroundColor: vtbBlue),
                 ),
               ],
             ),
             if (_showComments) ...[
-              const Divider(height: 24),
-              if (_loadingComments)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(12),
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                )
-              else
-                ..._orderedForDisplay(_comments).map((c) => _commentBlock(c, api, myId)),
-              if (_replyToId != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: InputChip(
-                    label: Text('Ответ для $_replyToName'),
-                    deleteIcon: const Icon(Icons.close, size: 18),
-                    onDeleted: () => setState(() {
-                      _replyToId = null;
-                      _replyToName = null;
-                    }),
-                  ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Divider(height: 24),
+                    if (_loadingComments)
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(12),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    else ...[
+                      ..._orderedForDisplay(_comments).map((c) => _commentBlock(c, api, myId)),
+                      if (_replyToId != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: InputChip(
+                            label: Text('Ответ для $_replyToName'),
+                            deleteIcon: const Icon(Icons.close, size: 18),
+                            onDeleted: () => setState(() {
+                              _replyToId = null;
+                              _replyToName = null;
+                            }),
+                          ),
+                        ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _controller,
+                              decoration: InputDecoration(
+                                hintText: _replyToId != null ? 'Ваш ответ…' : 'Написать комментарий',
+                                filled: true,
+                                fillColor: Colors.grey.shade50,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: const BorderSide(color: vtbBlue, width: 1.5),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              ),
+                              minLines: 1,
+                              maxLines: 4,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Material(
+                            color: vtbBlue,
+                            borderRadius: BorderRadius.circular(14),
+                            child: InkWell(
+                              onTap: _sending ? null : () => _sendComment(api),
+                              borderRadius: BorderRadius.circular(14),
+                              child: SizedBox(
+                                width: 48,
+                                height: 48,
+                                child: Center(
+                                  child: _sending
+                                      ? const SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Icon(Icons.send, color: Colors.white),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      decoration: InputDecoration(
-                        hintText: _replyToId != null
-                            ? 'Ваш ответ…'
-                            : 'Написать комментарий',
-                        filled: true,
-                        fillColor: Colors.grey.shade50,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: vtbBlue, width: 1.5),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                      ),
-                      minLines: 1,
-                      maxLines: 4,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Material(
-                    color: vtbBlue,
-                    borderRadius: BorderRadius.circular(14),
-                    child: InkWell(
-                      onTap: _sending ? null : () => _sendComment(api),
-                      borderRadius: BorderRadius.circular(14),
-                      child: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Center(
-                          child: _sending
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.send, color: Colors.white),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
               ),
             ],
           ],
@@ -472,7 +569,7 @@ class _PostCardState extends State<PostCard> {
     try {
       await api.updatePostComment(postId: widget.post.id, commentId: c.id, message: text);
       final list = await api.postComments(widget.post.id);
-      if (mounted) setState(() => _comments = list);
+      if (mounted) setState(() {_comments = list; _commentCount = list.length;});
     } on ApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.body)));
@@ -484,7 +581,7 @@ class _PostCardState extends State<PostCard> {
     try {
       await api.deletePostComment(postId: widget.post.id, commentId: c.id);
       final list = await api.postComments(widget.post.id);
-      if (mounted) setState(() => _comments = list);
+      if (mounted) setState(() {_comments = list; _commentCount = list.length;});
     } on ApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.body)));
