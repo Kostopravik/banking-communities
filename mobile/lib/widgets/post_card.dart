@@ -307,31 +307,6 @@ class _PostCardState extends State<PostCard> {
                     ),
                   ),
                 ),
-                if (_isCommunityPost) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: vtbBlue.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.verified, size: 14, color: vtbBlue),
-                        SizedBox(width: 4),
-                        Text(
-                          'Официально',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: vtbBlue,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -340,7 +315,7 @@ class _PostCardState extends State<PostCard> {
                       Row(
                         children: [
                           if (_isCommunityPost)
-                            const Icon(Icons.business_center, size: 16, color: vtbBlue)
+                            const Icon(Icons.verified, size: 16, color: vtbBlue)
                           else
                             const Icon(Icons.person, size: 16, color: Colors.grey),
                           const SizedBox(width: 4),
@@ -595,7 +570,7 @@ class _PostCardState extends State<PostCard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: EdgeInsets.only(
-        left: isReply ? 16 : 0,
+        left: isReply ? 16 : 8,
         top: 8,
         bottom: 8,
         right: 8,

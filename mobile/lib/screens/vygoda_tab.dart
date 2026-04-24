@@ -15,14 +15,13 @@ class VygodTab extends StatefulWidget {
 class _VygodTabState extends State<VygodTab> {
   int _key = 0;
 
-  Future<(List<BenefitDto>, List<CashbackDto>, List<CashbackOpportunityDto>)> _load(
+  Future<(List<BenefitDto>, List<CashbackDto>)> _load(
     AuthProvider auth,
   ) async {
     final api = auth.api;
     final benefits = await api.myBenefits();
     final cash = await api.myCashback();
-    final opportunities = await api.cashbackOpportunities();
-    return (benefits, cash, opportunities);
+    return (benefits, cash);
   }
 
   @override
@@ -31,7 +30,7 @@ class _VygodTabState extends State<VygodTab> {
 
     return RefreshIndicator(
       onRefresh: () async => setState(() => _key++),
-      child: FutureBuilder<(List<BenefitDto>, List<CashbackDto>, List<CashbackOpportunityDto>)>(
+      child: FutureBuilder<(List<BenefitDto>, List<CashbackDto>)>(
         key: ValueKey(_key),
         future: _load(auth),
         builder: (context, snap) {
@@ -51,16 +50,9 @@ class _VygodTabState extends State<VygodTab> {
           }
           final benefits = snap.data!.$1;
           final cash = snap.data!.$2;
-          final opportunities = snap.data!.$3;
 
-          // Разделяем на активные/доступные (зелёные) и неактивные/недоступные (серые)
           final activeBenefits = benefits.where((b) => b.isActive).toList();
           final inactiveBenefits = benefits.where((b) => !b.isActive).toList();
-          
-          final availableOpportunities = opportunities.where((o) => o.eligible).toList()
-            ..sort((a, b) => a.id.compareTo(b.id));
-          final unavailableOpportunities = opportunities.where((o) => !o.eligible).toList()
-            ..sort((a, b) => a.id.compareTo(b.id));
 
           return ListView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -78,48 +70,17 @@ class _VygodTabState extends State<VygodTab> {
               
               const SizedBox(height: 16),
               
-              // === СЕКЦИЯ 2: ВСЕ ДОСТУПНЫЕ ПРЕДЛОЖЕНИЯ (зелёные) ===
-              if (activeBenefits.isNotEmpty || availableOpportunities.isNotEmpty) ...[
+              // === СЕКЦИЯ 2: Доступный кэшбэк сообществ ===
+              if (activeBenefits.isNotEmpty) ...[
                 sectionTitle('Доступные предложения'),
-                
-                // Активные кэшбэки сообществ (с процентами)
-                if (activeBenefits.isNotEmpty) ...[
-                  const Padding(
-                    padding: EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 4),
-                    child: Text(
-                      'Кэшбэк сообществ',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.green,
-                      ),
-                    ),
-                  ),
-                  ...activeBenefits.map(_benefitCard),
-                ],
-                
-                // Доступные кэшбэки из каталога
-                if (availableOpportunities.isNotEmpty) ...[
-                  const Padding(
-                    padding: EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 4),
-                    child: Text(
-                      'Партнёрский кэшбэк',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.green,
-                      ),
-                    ),
-                  ),
-                  ...availableOpportunities.map(_opportunityCard),
-                ],
+                ...activeBenefits.map(_benefitCard),
               ],
               
               const SizedBox(height: 16),
               
-              // === СЕКЦИЯ 3: ВСЕ НЕДОСТУПНЫЕ ПРЕДЛОЖЕНИЯ (серые) ===
-              if (inactiveBenefits.isNotEmpty || unavailableOpportunities.isNotEmpty) ...[
-                sectionTitle('Недоступные предложения'),
+              // === СЕКЦИЯ 3: Кэшбэк сообществ с условиями ===
+              if (inactiveBenefits.isNotEmpty) ...[
+                sectionTitle('Предложения с условиями'),
                 const Padding(
                   padding: EdgeInsets.only(left: 16, right: 16, bottom: 8, top: 4),
                   child: Text(
@@ -131,141 +92,11 @@ class _VygodTabState extends State<VygodTab> {
                     ),
                   ),
                 ),
-                
-                // Неактивные кэшбэки сообществ
-                if (inactiveBenefits.isNotEmpty) ...[
-                  const Padding(
-                    padding: EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 4),
-                    child: Text(
-                      'Кэшбэк сообществ',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ),
-                  ...inactiveBenefits.map(_benefitCard),
-                ],
-                
-                // Недоступные кэшбэки из каталога
-                if (unavailableOpportunities.isNotEmpty) ...[
-                  const Padding(
-                    padding: EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 4),
-                    child: Text(
-                      'Партнёрский кэшбэк',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ),
-                  ...unavailableOpportunities.map(_opportunityCard),
-                ],
+                ...inactiveBenefits.map(_benefitCard),
               ],
             ],
           );
         },
-      ),
-    );
-  }
-
-  Widget _opportunityCard(CashbackOpportunityDto o) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: o.eligible 
-              ? Colors.green.withOpacity(0.12) 
-              : Colors.grey.shade200,
-          child: Icon(
-            o.eligible ? Icons.check_circle : Icons.local_offer,
-            color: o.eligible ? Colors.green : Colors.grey.shade600,
-          ),
-        ),
-        title: Text(o.categoryLabel ?? 'Категория ${o.categoryKey}'),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(o.hint),
-            if (!o.eligible)
-              Text(
-                'Прогресс: ${o.operationsInCategory}/${o.operationsRequired} покупок',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-          ],
-        ),
-        isThreeLine: !o.eligible,
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            if (o.accrued)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.check_circle,
-                      size: 14,
-                      color: Colors.green,
-                    ),
-                    SizedBox(width: 4),
-                    Text(
-                      'Начислен',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.green,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else if (o.eligible)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: vtbBlue.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text(
-                  'Доступен',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: vtbBlue,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              )
-            else
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'Недоступен',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-          ],
-        ),
       ),
     );
   }
@@ -334,7 +165,7 @@ class _VygodTabState extends State<VygodTab> {
           backgroundColor: Colors.green.withOpacity(0.12),
           child: const Icon(Icons.payments, color: Colors.green),
         ),
-        title: Text(c.categoryLabel ?? 'Партнерский кэшбэк'),
+        title: Text(c.categoryLabel ?? 'Кэшбэк'),
         subtitle: Text(c.createdAt ?? ''),
         trailing: Text(
           '${c.amount.toStringAsFixed(0)} ₽',
